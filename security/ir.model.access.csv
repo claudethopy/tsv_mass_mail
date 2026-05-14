@@ -1,0 +1,3 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_tsv_mailing,tsv.mailing,model_tsv_mailing,tsv_access_restrictions.group_tsv_department_admin,1,1,1,1
+access_tsv_mailing_recipient,tsv.mailing.recipient,model_tsv_mailing_recipient,tsv_access_restrictions.group_tsv_department_admin,1,1,1,1
