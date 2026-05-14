@@ -2,24 +2,20 @@
 
 Odoo 18 Addon für den TSV Schwerin. Bietet eine leichtgewichtige Alternative zum
 kostenpflichtigen Odoo-Enterprise-Modul `mass_mailing`. Erlaubt das Versenden von
-E-Mails an eine frei wählbare Liste von Kontakten (`res.partner`) — mit Rate-Limiting
-durch einen Cron-Job, um den E-Mail-Provider nicht zu überlasten.
+Sammel-E-Mails an eine frei wählbare Liste von Kontakten (`res.partner`) — mit
+Rate-Limiting durch einen Cron-Job, um den E-Mail-Provider nicht zu überlasten.
+Abteilungsadmins können nur Mitglieder ihrer eigenen Abteilung anschreiben; TSV-Admins
+haben uneingeschränkten Zugriff mit optionalem Abteilungsfilter.
 
 ---
 
 ## Voraussetzungen
 
 - Odoo 18
-- Modul `tsv_membership_form` installiert (wird für den Schnellknopf "Alle aktiven
-  Mitglieder hinzufügen" benötigt, da er auf das Feld `tsv_membership_state` zugreift)
+- Modul `tsv_membership_form` installiert (für `tsv_membership_state` auf `res.partner`)
+- Modul `tsv_access_restrictions` installiert (für Gruppen und `department_id`)
 - Ausgehender Mailserver konfiguriert (*Einstellungen → Technisch → E-Mail → Ausgehende
   Mailserver*)
-
-> **Hinweis zur Abhängigkeit:** Die Kernfunktion (Mailing mit beliebiger Partner-Auswahl)
-> ist unabhängig von `tsv_membership_form`. Nur der Schnellknopf setzt das dortige
-> Mitgliedschaftsfeld voraus. Sollte das Modul einmal nicht mehr benötigt werden, kann
-> `action_add_all_members` in `models/tsv_mailing.py` durch eine eigene Filterlogik
-> ersetzt und die Abhängigkeit entfernt werden.
 
 ---
 
@@ -35,36 +31,51 @@ docker compose exec web odoo -d tsv_18 \
 
 ## Bedienung (Schritt für Schritt)
 
-### 1. Neues Mailing anlegen
+### 1. Neue Sammel-E-Mail anlegen
 
-*TSV Mailing → Mailings → Neu*
+*TSV → Sammel-E-Mails → Neu*
 
 | Feld | Bedeutung |
 |---|---|
 | Bezeichnung | Interner Name, z. B. „Newsletter Mai 2026" |
 | Betreff | Betreff der E-Mail |
-| Inhalt | HTML-E-Mail-Body (Rich-Text-Editor) |
+| E-Mail-Vorlage | Optionale Odoo-Vorlage als Ausgangspunkt (wird in den Editor geladen) |
+| Abteilung | Wird automatisch aus dem Nutzerprofil gesetzt; bestimmt die Sichtbarkeit |
+| Nur diese Abteilungen | (Nur TSV-Admin) Schränkt den Schnellknopf auf bestimmte Abteilungen ein |
+| Inhalt | HTML-E-Mail-Body (Rich-Text-Editor, startet mit ausreichend Höhe) |
+| Anhänge | Dateianhänge, die an jede E-Mail angehängt werden |
 
-### 2. Empfänger wählen
+### 2. Vorlage verwenden
 
-Im Tab **Empfänger** stehen zwei Wege zur Auswahl:
+- **Vorlage auswählen**: Sobald eine Vorlage gewählt wird, lädt deren Inhalt automatisch
+  in den Editor. Der Betreff wird übernommen, falls das Feld noch leer ist.
+- **Als Vorlage speichern**: Schaltfläche in der Kopfzeile speichert den aktuellen
+  Betreff und Inhalt als neue Odoo-E-Mail-Vorlage und verknüpft sie sofort.
+
+Vorlagen werden unter *Einstellungen → Technisch → E-Mail → Vorlagen* verwaltet und
+müssen dem Modell **Kontakt (`res.partner`)** zugeordnet sein.
+
+### 3. Empfänger wählen
+
+Im Tab **Empfänger** (zeigt Name, Abteilung und E-Mail-Adresse) stehen zwei Wege:
 
 - **Manuell**: Partner über das Suchfeld einzeln hinzufügen oder entfernen
-- **Schnellknopf** „Alle aktiven Mitglieder hinzufügen" (Kopfzeile): trägt automatisch
-  alle Partner mit `tsv_membership_state = 'member'` und vorhandener E-Mail-Adresse ein.
-  Die Liste kann danach noch manuell angepasst werden.
+- **Schnellknopf** „Alle aktiven Mitglieder hinzufügen" (Kopfzeile):
+  - *Abteilungsadmin*: fügt nur Mitglieder der eigenen Abteilung hinzu
+  - *TSV-Admin*: fügt alle Mitglieder hinzu — oder nur die aus den im Feld
+    „Nur diese Abteilungen" gewählten Abteilungen, falls gesetzt
 
 > Empfänger können nur im Zustand **Entwurf** bearbeitet werden.
 
-### 3. Versand starten
+### 4. Versand starten
 
 Schaltfläche **„Versand starten"** in der Kopfzeile:
 
 - Erzeugt eine Versandzeile (`tsv.mailing.recipient`) für jeden Empfänger
 - Setzt den Status auf **Bereit**
-- Der Cron-Job übernimmt das tatsächliche Versenden
+- Der Cron-Job übernimmt das tatsächliche Versenden in Batches
 
-### 4. Fortschritt verfolgen
+### 5. Fortschritt verfolgen
 
 Sobald der Cron-Job den ersten Batch verschickt hat, wechselt der Status auf
 **Wird gesendet**. Im Tab **Versandprotokoll** ist pro Empfänger sichtbar:
@@ -79,20 +90,33 @@ Sobald der Cron-Job den ersten Batch verschickt hat, wechselt der Status auf
 
 Zeilen sind farblich hervorgehoben: grün = gesendet, rot = fehlgeschlagen, grau = ausstehend.
 
-### 5. Abbrechen und neu starten
+### 6. Abbrechen und neu starten
 
 - **„Abbrechen"**: stoppt den Versand (Status → Abgebrochen); bereits gesendete E-Mails
   bleiben erhalten
-- **„Zurück zu Entwurf"**: setzt den Status auf Entwurf zurück; ausstehende Versandzeilen
-  werden beim nächsten **„Versand starten"** neu erzeugt, bereits gesendete/fehlerhafte
-  Zeilen bleiben als Protokoll erhalten
+- **„Zurück zu Entwurf"**: setzt den Status zurück; ausstehende Versandzeilen werden beim
+  nächsten **„Versand starten"** neu erzeugt, bereits gesendete/fehlerhafte Zeilen bleiben
+  als Protokoll erhalten
+
+---
+
+## Zugriffsrechte
+
+| Gruppe | Sieht | Schnellknopf |
+|---|---|---|
+| `group_tsv_department_admin` | Nur eigene Mailings (gleiche Abteilung) | Nur eigene Abteilungsmitglieder |
+| `group_tsv_admin` | Alle Mailings | Alle Mitglieder (oder gefiltert nach „Nur diese Abteilungen") |
+
+Die Empfängerliste im Entwurf ist durch die bestehende `ir.rule` auf `res.partner`
+abgesichert: Abteilungsadmins können dort ohnehin nur Partner ihrer eigenen Abteilung
+sehen und auswählen.
 
 ---
 
 ## Rate-Limiting (Batchgröße konfigurieren)
 
 Der Cron-Job läuft standardmäßig alle **5 Minuten** und sendet pro Lauf maximal
-**30 E-Mails**. Das ergibt ca. 360 E-Mails pro Stunde.
+**30 E-Mails** (ca. 360 E-Mails/Stunde).
 
 ### Batchgröße anpassen
 
@@ -106,9 +130,6 @@ Der Cron-Job läuft standardmäßig alle **5 Minuten** und sendet pro Lauf maxim
 
 *Einstellungen → Technisch → Automatische Aktionen → „TSV Mailing: Batch versenden"*
 
-Dort lässt sich das Intervall direkt ändern (z. B. alle 10 Minuten für langsamere
-Provider).
-
 **Beispielkonfigurationen:**
 
 | Batchgröße | Intervall | E-Mails/Stunde |
@@ -116,16 +137,6 @@ Provider).
 | 30 | 5 min | 360 |
 | 20 | 5 min | 240 |
 | 50 | 10 min | 300 |
-
----
-
-## Zugriffsrechte
-
-Standardmäßig ist das Modul nur für Nutzer der Gruppe **Einstellungen / Technisch**
-(`base.group_system`) sichtbar und bedienbar. Um es für weitere Nutzer freizugeben,
-die Einträge in `security/ir.model.access.csv` und die `groups`-Attribute in
-`views/tsv_mailing_views.xml` auf die gewünschte Gruppe anpassen (z. B.
-`base.group_partner_manager` für Kontakt-Manager).
 
 ---
 
@@ -142,7 +153,8 @@ tsv_mass_mail/
 │   ├── tsv_mailing.py              ← Hauptmodell + _send_batch()-Logik
 │   └── tsv_mailing_recipient.py    ← Versandzeilen pro Empfänger
 ├── security/
-│   └── ir.model.access.csv
+│   ├── ir.model.access.csv
+│   └── record_rules.xml            ← Abteilungsbeschränkung per ir.rule
 └── views/
     └── tsv_mailing_views.xml       ← Form, Liste, Menü
 ```
@@ -151,8 +163,7 @@ tsv_mass_mail/
 
 ## Einschränkungen
 
-- Es gibt kein Opt-out-Mechanismus in diesem Modul. Für Blog-Benachrichtigungen mit
-  Abmeldefunktion siehe `tsv_blog_notifications`.
-- Anhänge werden nicht unterstützt.
-- Bei SMTP-Fehlern (z. B. ungültige Adresse) wird die Versandzeile als **Fehlgeschlagen**
-  markiert; ein automatischer Wiederholungsversuch findet nicht statt.
+- Kein Opt-out-Mechanismus. Für Blog-Benachrichtigungen mit Abmeldefunktion
+  siehe `tsv_blog_notifications`.
+- Bei SMTP-Fehlern wird die Versandzeile als **Fehlgeschlagen** markiert;
+  ein automatischer Wiederholungsversuch findet nicht statt.
