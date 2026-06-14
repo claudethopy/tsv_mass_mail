@@ -4,7 +4,7 @@
     'summary': 'Einfaches Massen-Mailing für TSV-Mitglieder mit Rate-Limiting',
     'author': 'TSV Schwerin',
     'category': 'Communication',
-    'depends': ['mail', 'tsv_membership_form', 'tsv_access_restrictions'],
+    'depends': ['mail', 'tsv_membership_form', 'tsv_access_restrictions', 'tsv_main'],
     'data': [
         'security/ir.model.access.csv',
         'security/record_rules.xml',

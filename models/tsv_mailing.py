@@ -80,6 +80,15 @@ class TsvMailing(models.Model):
             rec.failed_count = len(lines.filtered(lambda l: l.state == 'failed'))
             rec.pending_count = len(lines.filtered(lambda l: l.state == 'pending'))
 
+    def action_add_board_members(self):
+        self.ensure_one()
+        positions = self.env['tsv.position'].search([
+            ('contact_id', '!=', False),
+            ('contact_id.email', '!=', False),
+        ])
+        contacts = positions.mapped('contact_id')
+        self.recipient_ids = [(4, c.id) for c in contacts]
+
     def action_add_all_members(self):
         self.ensure_one()
         is_admin = self.env.user.has_group('tsv_access_restrictions.group_tsv_admin')

@@ -11,6 +11,9 @@
                     <button name="action_add_all_members" type="object"
                             string="Alle aktiven Mitglieder hinzufügen"
                             invisible="state != 'draft'"/>
+                    <button name="action_add_board_members" type="object"
+                            string="Erweiterten Vorstand hinzufügen"
+                            invisible="state != 'draft'"/>
                     <button name="action_start" type="object"
                             string="Versand starten"
                             class="btn-primary"
@@ -46,7 +49,9 @@
                                    groups="tsv_access_restrictions.group_tsv_admin"/>
                         </group>
                     </group>
+                    <separator string="E-Mail-Text"/>
                     <field name="body_html" style="min-height: 400px;"
+                           nolabel="1"
                            readonly="state != 'draft'"/>
                     <field name="attachment_ids" widget="many2many_binary"
                            readonly="state != 'draft'"/>
@@ -111,6 +116,33 @@
         <field name="name">Sammel-E-Mails</field>
         <field name="res_model">tsv.mailing</field>
         <field name="view_mode">list,form</field>
+    </record>
+
+    <!-- Suchfilter res.partner: Erweiterung für Empfänger-Dialog -->
+    <record id="view_partner_search_tsv_mailing" model="ir.ui.view">
+        <field name="name">res.partner.search.tsv.mailing</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_res_partner_filter"/>
+        <field name="arch" type="xml">
+            <filter name="supplier" position="after">
+                <separator/>
+                <filter name="tsv_members"
+                        string="Aktive Mitglieder"
+                        domain="[('tsv_membership_state','=','member')]"/>
+                <filter name="tsv_has_position"
+                        string="Hat ein Vereinsamt"
+                        domain="[('position_ids','!=',False)]"/>
+                <separator/>
+            </filter>
+            <xpath expr="//group[@expand='0']" position="inside">
+                <filter name="group_department"
+                        string="Abteilung"
+                        context="{'group_by': 'department_id'}"/>
+                <filter name="group_position"
+                        string="Vereinsamt"
+                        context="{'group_by': 'position_ids'}"/>
+            </xpath>
+        </field>
     </record>
 
     <!-- Menü: Untermenü von TSV -->
