@@ -171,10 +171,16 @@ class TsvMailing(models.Model):
                 mailing.state = 'done'
                 continue
 
+            smtp_from = False
+            mail_server = self.env['ir.mail_server'].sudo().search([], order='sequence asc', limit=1)
+            if mail_server and mail_server.smtp_user:
+                smtp_from = mail_server.smtp_user
+
             for line in pending:
                 try:
                     mail = self.env['mail.mail'].sudo().create({
                         'subject': mailing.subject,
+                        'email_from': smtp_from or self.env.company.email,
                         'email_to': line.email,
                         'body_html': mailing.body_html,
                         'attachment_ids': [(4, att.id) for att in mailing.attachment_ids],
