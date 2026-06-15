@@ -152,6 +152,11 @@ class TsvMailing(models.Model):
         self.state = 'cancelled'
 
     def action_reset_draft(self):
+        # Kompletter Neustart: Versandprotokoll verwerfen, damit ein erneuter
+        # Start frische pending-Zeilen fuer alle aktuellen Empfaenger erzeugt.
+        # Ohne dieses Loeschen wuerde action_start die bereits vorhandenen
+        # sent/failed-Zeilen ueberspringen und es wuerde nichts versendet.
+        self.recipient_line_ids.unlink()
         self.state = 'draft'
 
     def _get_sender(self, mailing, fallback_from):
@@ -178,11 +183,17 @@ class TsvMailing(models.Model):
             name = office_contact.name or sender_partner.name or self.env.company.name
             return formataddr((name, office_contact.email)), office_contact.email
 
-        # Rueckfall: SMTP-/Firmenadresse als Absender, Reply-To auf den Ersteller
+        # Rueckfall: SMTP-/Firmenadresse als Absender, Reply-To auf den Ersteller.
+        # fallback_from kann leer sein (kein SMTP-User, keine Firmen-E-Mail) -
+        # dann darf formataddr nicht crashen, sonst reisst es den ganzen Cron-Lauf
+        # mit zurueck. In dem Fall ohne gueltigen Absender: der einzelne
+        # Sendeversuch schlaegt dann sauber pro Empfaenger fehl.
         name = sender_partner.name or self.env.company.name
         if mailing.department_id:
             name = '%s (%s)' % (name, mailing.department_id.name)
-        return formataddr((name, fallback_from)), (sender_partner.email or fallback_from)
+        email_from = formataddr((name, fallback_from)) if fallback_from else False
+        reply_to = sender_partner.email or fallback_from or False
+        return email_from, reply_to
 
     def _send_batch(self):
         """Wird vom Cron-Job aufgerufen: sendet den nächsten Batch ausstehender Empfänger."""
