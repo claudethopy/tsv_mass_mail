@@ -1,5 +1,6 @@
 from odoo import api, fields, models
 from odoo.exceptions import UserError
+from odoo.tools import formataddr
 
 
 class TsvMailing(models.Model):
@@ -176,6 +177,18 @@ class TsvMailing(models.Model):
             if mail_server and mail_server.smtp_user:
                 smtp_from = mail_server.smtp_user
 
+            # Absenderadresse muss zur authentifizierten Domain passen (SPF/DMARC),
+            # sonst lehnt der Provider ab. Der ANZEIGENAME davor ist jedoch frei und
+            # das Reply-To ebenfalls. So sieht der Empfaenger, von wem die Mail kommt,
+            # und Antworten gehen an die richtige Person.
+            from_address = smtp_from or self.env.company.email
+            sender = mailing.create_uid
+            sender_name = sender.name or self.env.company.name
+            if mailing.department_id:
+                sender_name = '%s (%s)' % (sender_name, mailing.department_id.name)
+            email_from = formataddr((sender_name, from_address))
+            reply_to = sender.email or sender.partner_id.email or from_address
+
             for line in pending:
                 mail = False
                 try:
@@ -184,7 +197,8 @@ class TsvMailing(models.Model):
                     # Datensatz bei Erfolg sofort geloescht).
                     mail = self.env['mail.mail'].sudo().create({
                         'subject': mailing.subject,
-                        'email_from': smtp_from or self.env.company.email,
+                        'email_from': email_from,
+                        'reply_to': reply_to,
                         'email_to': line.email,
                         'body_html': mailing.body_html,
                         'attachment_ids': [(4, att.id) for att in mailing.attachment_ids],
