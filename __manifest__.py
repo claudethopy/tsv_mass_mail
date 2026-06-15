@@ -1,6 +1,6 @@
 {
     'name': 'TSV Massen-Mailing',
-    'version': '18.0.1.1.3',
+    'version': '18.0.1.1.4',
     'summary': 'Einfaches Massen-Mailing für TSV-Mitglieder mit Rate-Limiting',
     'author': 'TSV Schwerin',
     'category': 'Communication',

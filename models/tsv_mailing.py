@@ -154,6 +154,36 @@ class TsvMailing(models.Model):
     def action_reset_draft(self):
         self.state = 'draft'
 
+    def _get_sender(self, mailing, fallback_from):
+        """Ermittelt Absenderadresse und Reply-To fuer ein Mailing.
+
+        Vorrang hat die E-Mail des Amtskontakts zum Vereinsamt des Erstellers:
+        Odoo-User haben meist keine eigene E-Mail, die echte tsv-schwerin.org-
+        Adresse haengt am Amtskontakt (tsv.position.contact_id). Wir suchen also
+        ueber create_uid.partner_id.position_ids das erste Amt mit hinterlegter
+        Amtskontakt-E-Mail und senden darueber. Faellt das weg, nutzen wir die
+        SMTP-/Firmenadresse als Rueckfallebene.
+
+        Die Adresse muss zur authentifizierten Domain passen (SPF/DMARC), sonst
+        lehnt der Provider ab; die Amtskontakt-Adressen liegen in dieser Domain.
+        """
+        sender_partner = mailing.create_uid.partner_id
+        office_contact = next((
+            pos.contact_id
+            for pos in sender_partner.position_ids
+            if pos.contact_id and pos.contact_id.email
+        ), False)
+
+        if office_contact:
+            name = office_contact.name or sender_partner.name or self.env.company.name
+            return formataddr((name, office_contact.email)), office_contact.email
+
+        # Rueckfall: SMTP-/Firmenadresse als Absender, Reply-To auf den Ersteller
+        name = sender_partner.name or self.env.company.name
+        if mailing.department_id:
+            name = '%s (%s)' % (name, mailing.department_id.name)
+        return formataddr((name, fallback_from)), (sender_partner.email or fallback_from)
+
     def _send_batch(self):
         """Wird vom Cron-Job aufgerufen: sendet den nächsten Batch ausstehender Empfänger."""
         batch_size = int(self.env['ir.config_parameter'].sudo().get_param(
@@ -177,17 +207,8 @@ class TsvMailing(models.Model):
             if mail_server and mail_server.smtp_user:
                 smtp_from = mail_server.smtp_user
 
-            # Absenderadresse muss zur authentifizierten Domain passen (SPF/DMARC),
-            # sonst lehnt der Provider ab. Der ANZEIGENAME davor ist jedoch frei und
-            # das Reply-To ebenfalls. So sieht der Empfaenger, von wem die Mail kommt,
-            # und Antworten gehen an die richtige Person.
             from_address = smtp_from or self.env.company.email
-            sender = mailing.create_uid
-            sender_name = sender.name or self.env.company.name
-            if mailing.department_id:
-                sender_name = '%s (%s)' % (sender_name, mailing.department_id.name)
-            email_from = formataddr((sender_name, from_address))
-            reply_to = sender.email or sender.partner_id.email or from_address
+            email_from, reply_to = self._get_sender(mailing, from_address)
 
             for line in pending:
                 mail = False
