@@ -177,19 +177,40 @@ class TsvMailing(models.Model):
                 smtp_from = mail_server.smtp_user
 
             for line in pending:
+                mail = False
                 try:
+                    # auto_delete=False, damit wir nach dem Senden den echten
+                    # Status der Mail auslesen koennen (bei auto_delete wuerde der
+                    # Datensatz bei Erfolg sofort geloescht).
                     mail = self.env['mail.mail'].sudo().create({
                         'subject': mailing.subject,
                         'email_from': smtp_from or self.env.company.email,
                         'email_to': line.email,
                         'body_html': mailing.body_html,
                         'attachment_ids': [(4, att.id) for att in mailing.attachment_ids],
-                        'auto_delete': True,
+                        'auto_delete': False,
                     })
                     mail.send(raise_exception=True)
-                    line.write({'state': 'sent', 'sent_at': fields.Datetime.now()})
+                    # WICHTIG: mail.send() liefert auch dann True, wenn Odoo den
+                    # Empfaenger still verwirft (ungueltige/blacklisted Adresse,
+                    # ungueltiger Absender) und in Wahrheit nichts versendet wurde.
+                    # Deshalb pruefen wir den tatsaechlichen Mail-Status, nicht den
+                    # Rueckgabewert von send().
+                    if mail.state == 'sent':
+                        line.write({'state': 'sent', 'sent_at': fields.Datetime.now()})
+                    else:
+                        line.write({
+                            'state': 'failed',
+                            'error_message': (
+                                mail.failure_reason
+                                or 'E-Mail nicht versendet (Status: %s)' % mail.state
+                            )[:255],
+                        })
                 except Exception as exc:
                     line.write({'state': 'failed', 'error_message': str(exc)[:255]})
+                finally:
+                    if mail and mail.exists():
+                        mail.sudo().unlink()
 
             if not mailing.recipient_line_ids.filtered(lambda l: l.state == 'pending'):
                 mailing.state = 'done'
