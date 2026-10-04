@@ -26,7 +26,10 @@
                             string="Zurück zu Entwurf"
                             invisible="state not in ('done', 'cancelled')"
                             groups="tsv_access_restrictions.group_tsv_admin"
-                            confirm="Das Versandprotokoll wird gelöscht. Bei erneutem Versand erhalten die Empfänger die E-Mail nochmals. Trotzdem zurück zu Entwurf?"/>
+                            confirm="Das Versandprotokoll wird gelöscht (als PDF im Verlauf gesichert). Bei erneutem Versand erhalten die Empfänger die E-Mail nochmals. Trotzdem zurück zu Entwurf?"/>
+                    <button name="%(tsv_mass_mail.action_report_tsv_mailing_log)d" type="action"
+                            string="Versandprotokoll (PDF)"
+                            invisible="state == 'draft'"/>
                     <button name="action_save_as_template" type="object"
                             string="Als Vorlage speichern"
                             invisible="state != 'draft'"/>

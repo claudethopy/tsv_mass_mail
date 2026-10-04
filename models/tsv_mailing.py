@@ -1,8 +1,12 @@
+import logging
+
 from markupsafe import escape
 
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError
 from odoo.tools import formataddr
+
+_logger = logging.getLogger(__name__)
 
 
 class TsvMailing(models.Model):
@@ -152,7 +156,7 @@ class TsvMailing(models.Model):
         members = self.env['res.partner'].search(domain)
         self.recipient_ids = [(4, p.id) for p in members]
 
-    def _log(self, text):
+    def _log(self, text, attachment_ids=None):
         """Protokolleintrag im Chatter (wer, wann steht automatisch dabei)."""
         # Viele Odoo-Benutzer haben keine eigene E-Mail-Adresse; ohne email_from verweigert
         # message_post() den Eintrag. Autor bleibt der handelnde Benutzer.
@@ -161,7 +165,27 @@ class TsvMailing(models.Model):
                       or self._get_smtp_from() or 'noreply@localhost')
         self.sudo().message_post(
             body=escape(text), message_type='notification', subtype_xmlid='mail.mt_note',
-            author_id=user_partner.id, email_from=email_from)
+            author_id=user_partner.id, email_from=email_from,
+            attachment_ids=attachment_ids or [])
+
+    def _attach_log_pdf(self):
+        """Versandprotokoll als PDF erzeugen und am Mailing ablegen. Gibt die Attachment-IDs zurück.
+        Schlägt die PDF-Erzeugung fehl, darf das Zurücksetzen nicht scheitern."""
+        self.ensure_one()
+        try:
+            pdf, _fmt = self.env['ir.actions.report'].sudo()._render_qweb_pdf(
+                'tsv_mass_mail.action_report_tsv_mailing_log', self.ids)
+            attachment = self.env['ir.attachment'].sudo().create({
+                'name': 'Versandprotokoll - %s.pdf' % self.name,
+                'raw': pdf,
+                'mimetype': 'application/pdf',
+                'res_model': self._name,
+                'res_id': self.id,
+            })
+            return [attachment.id]
+        except Exception as exc:
+            _logger.warning('Versandprotokoll-PDF fuer Mailing %s konnte nicht erzeugt werden: %s', self.id, exc)
+            return []
 
     def action_start(self):
         self.ensure_one()
@@ -235,11 +259,15 @@ class TsvMailing(models.Model):
             raise UserError(_('Nur TSV-Admins dürfen ein Mailing zurück zu Entwurf setzen.'))
         for rec in self:
             lines = rec.recipient_line_ids
+            # Protokoll vor dem Loeschen als PDF sichern (haengt am Verlaufseintrag)
+            attachments = rec._attach_log_pdf() if lines else []
             rec._log(_('Zurück zu Entwurf gesetzt von %(user)s. Versandprotokoll gelöscht '
-                       '(%(total)s Einträge, davon %(sent)s gesendet). Bei erneutem Versand erhalten die '
+                       '(%(total)s Einträge, davon %(sent)s gesendet)%(pdf)s. Bei erneutem Versand erhalten die '
                        'Empfänger die E-Mail nochmals.',
                        user=self.env.user.name, total=len(lines),
-                       sent=len(lines.filtered(lambda l: l.state == 'sent'))))
+                       sent=len(lines.filtered(lambda l: l.state == 'sent')),
+                       pdf=_(', als PDF gesichert') if attachments else ''),
+                     attachment_ids=attachments)
             lines.unlink()
             rec.state = 'draft'
 

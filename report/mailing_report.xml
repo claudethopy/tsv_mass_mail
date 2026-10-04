@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="action_report_tsv_mailing_log" model="ir.actions.report">
+        <field name="name">Versandprotokoll (PDF)</field>
+        <field name="model">tsv.mailing</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">tsv_mass_mail.report_tsv_mailing_log</field>
+        <field name="report_file">tsv_mass_mail.report_tsv_mailing_log</field>
+        <field name="print_report_name">'Versandprotokoll - %s' % (object.name or '')</field>
+        <field name="binding_model_id" ref="tsv_mass_mail.model_tsv_mailing"/>
+        <field name="binding_type">report</field>
+    </record>
+
+    <template id="report_tsv_mailing_log">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="web.basic_layout">
+                    <t t-set="lines" t-value="o.sudo().recipient_line_ids.sorted(lambda l: ((l.partner_id.name or l.email or '').lower()))"/>
+                    <t t-set="sent_dates" t-value="lines.filtered(lambda l: l.sent_at).mapped('sent_at')"/>
+                    <div class="page" style="font-size: 12px;">
+                        <h2>Versandprotokoll Sammel-E-Mail</h2>
+                        <table class="table table-sm" style="width: 100%; margin-bottom: 18px;">
+                            <tr><td style="width: 22%;"><strong>Bezeichnung</strong></td><td><span t-field="o.name"/></td></tr>
+                            <tr><td><strong>Betreff</strong></td><td><span t-field="o.subject"/></td></tr>
+                            <tr><td><strong>Absender</strong></td><td><span t-esc="o.sender_display"/></td></tr>
+                            <tr><td><strong>Erstellt</strong></td><td><span t-field="o.create_date"/> von <span t-esc="o.create_uid.sudo().name"/></td></tr>
+                            <tr><td><strong>Status</strong></td><td><span t-field="o.state"/></td></tr>
+                            <tr><td><strong>Versand</strong></td>
+                                <td>
+                                    <t t-if="sent_dates">
+                                        erste Mail <span t-esc="min(sent_dates)" t-options="{'widget': 'datetime'}"/>,
+                                        letzte Mail <span t-esc="max(sent_dates)" t-options="{'widget': 'datetime'}"/>
+                                    </t>
+                                    <t t-else="">noch keine Mail versendet</t>
+                                </td></tr>
+                            <tr><td><strong>Ergebnis</strong></td>
+                                <td>
+                                    <t t-esc="len(lines)"/> Empfänger:
+                                    <t t-esc="len(lines.filtered(lambda l: l.state == 'sent'))"/> gesendet,
+                                    <t t-esc="len(lines.filtered(lambda l: l.state == 'failed'))"/> fehlgeschlagen,
+                                    <t t-esc="len(lines.filtered(lambda l: l.state == 'pending'))"/> ausstehend
+                                </td></tr>
+                        </table>
+
+                        <t t-if="lines">
+                            <table class="table table-sm table-bordered" style="width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 5%;">Nr.</th>
+                                        <th>Name</th>
+                                        <th>E-Mail-Adresse</th>
+                                        <th style="width: 12%;">Status</th>
+                                        <th style="width: 17%;">Gesendet am</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-foreach="lines" t-as="l">
+                                        <tr>
+                                            <td><t t-esc="l_index + 1"/></td>
+                                            <td><span t-esc="l.partner_id.name"/></td>
+                                            <td><span t-esc="l.email"/></td>
+                                            <td>
+                                                <t t-if="l.state == 'sent'">gesendet</t>
+                                                <t t-elif="l.state == 'failed'"><strong>fehlgeschlagen</strong></t>
+                                                <t t-else="">ausstehend</t>
+                                            </td>
+                                            <td><span t-esc="l.sent_at" t-options="{'widget': 'datetime'}"/></td>
+                                        </tr>
+                                        <tr t-if="l.error_message">
+                                            <td/>
+                                            <td colspan="4" style="color: #a00;">Fehler: <span t-esc="l.error_message"/></td>
+                                        </tr>
+                                    </t>
+                                </tbody>
+                            </table>
+                        </t>
+                        <p t-else="">Kein Versandprotokoll vorhanden (das Mailing wurde noch nicht gestartet oder das Protokoll wurde zurückgesetzt).</p>
+
+                        <p style="margin-top: 18px; color: #666;">
+                            Erstellt am <span t-esc="context_timestamp(datetime.datetime.now()).strftime('%d.%m.%Y %H:%M')"/>
+                            von <span t-esc="user.name"/>.
+                        </p>
+                    </div>
+                </t>
+            </t>
+        </t>
+    </template>
+
+</odoo>
